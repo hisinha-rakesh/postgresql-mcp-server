@@ -1,0 +1,42 @@
+# Environment Files with Secrets
+.env
+.env.local
+.env.deployment
+.env.*.local
+*.env
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+ENV/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Deployment
+deployment-info.txt
+*.dump
+*.sql
+backups/
+
+# Logs
+*.log
+logs/
+
+# Azure
+azure-credentials.json

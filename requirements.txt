@@ -1,0 +1,14 @@
+requests
+fastapi
+uvicorn
+httpx
+pydantic
+sqlalchemy
+python-dotenv
+psycopg2-binary
+azure-ai-inference
+azure-identity
+
+# MCP Server Dependencies
+mcp>=1.0.0
+asyncpg>=0.29.0

@@ -1,0 +1,37 @@
+{
+  "name": "postgres-enterprise-mcp-server",
+  "version": "1.0.0",
+  "description": "Enterprise-level MCP Server for PostgreSQL with full DDL, DML, and TCL support",
+  "main": "mcp_server_enterprise.py",
+  "type": "module",
+  "scripts": {
+    "start": "python mcp_server_enterprise.py",
+    "test": "python mcp_client_enterprise.py"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "postgresql",
+    "database",
+    "sql",
+    "ddl",
+    "dml",
+    "tcl",
+    "claude",
+    "anthropic"
+  ],
+  "author": "Your Name",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yourusername/postgres-enterprise-mcp-server"
+  },
+  "engines": {
+    "python": ">=3.8"
+  },
+  "dependencies": {},
+  "python_dependencies": {
+    "note": "Python dependencies are listed in requirements.txt",
+    "install": "pip install -r requirements.txt"
+  }
+}

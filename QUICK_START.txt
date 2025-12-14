@@ -1,0 +1,155 @@
+===============================================================================
+  ENTERPRISE MCP SERVER - QUICK START GUIDE
+===============================================================================
+
+[COMPLETED] Setup Status:
+  [OK] Python dependencies installed
+  [OK] Database connection verified (PostgreSQL 17.6 on Azure)
+  [OK] Configuration file created
+  [OK] MCP server ready to use
+
+===============================================================================
+  NEXT STEPS TO USE WITH CLAUDE DESKTOP
+===============================================================================
+
+Step 1: Open Claude Desktop Config File
+----------------------------------------
+Windows: Press Win+R, type: %APPDATA%\Claude
+         Then open: claude_desktop_config.json
+
+Full path: C:\Users\kusha\AppData\Roaming\Claude\claude_desktop_config.json
+
+
+Step 2: Copy This Configuration
+--------------------------------
+Copy the contents from:
+  C:\Users\kusha\postgresql-mcp\claude_desktop_config.json
+
+Or paste this JSON:
+
+{
+  "mcpServers": {
+    "postgres-enterprise": {
+      "command": "C:\\Users\\kusha\\postgresql-mcp\\.venv\\Scripts\\python.exe",
+      "args": [
+        "C:\\Users\\kusha\\postgresql-mcp\\mcp_server_enterprise.py"
+      ],
+      "env": {
+        "DATABASE_URL": "postgresql://pgadmina:Centurylink%40123@pgs-youtube-app.postgres.database.azure.com:5432/postgres?sslmode=require"
+      }
+    }
+  }
+}
+
+
+Step 3: Restart Claude Desktop
+-------------------------------
+1. Completely close Claude Desktop (check system tray)
+2. Restart Claude Desktop
+3. Wait a few seconds for initialization
+
+
+Step 4: Test It!
+----------------
+In Claude Desktop, try these commands:
+
+  "What tables exist in my database?"
+  "Create a table called test_users with id, name, and email columns"
+  "Insert a test user into test_users"
+  "Show me all data from test_users"
+  "Drop the test_users table"
+
+===============================================================================
+  FEATURES YOU CAN USE
+===============================================================================
+
+SELECT Queries:
+  - "Show me all tables"
+  - "Get the first 10 users"
+  - "Find records where age > 25"
+
+INSERT Data:
+  - "Add a new user with name 'John' and email 'john@example.com'"
+  - "Insert multiple records into the products table"
+
+UPDATE Data:
+  - "Update email to 'new@email.com' for user id 5"
+  - "Change status to 'active' for all pending users"
+
+DELETE Data:
+  - "Delete user with id 10"
+  - "Remove all records older than 2020"
+
+CREATE Tables:
+  - "Create a habits table with id, name, and frequency columns"
+  - "Create an orders table with foreign key to users"
+
+ALTER Tables:
+  - "Add a 'description' column to the products table"
+  - "Create an index on email in the users table"
+
+DROP Tables:
+  - "Drop the temporary_data table"
+
+TRANSACTIONS:
+  - "Create an order and add 3 items, all in one transaction"
+
+INSPECT Schema:
+  - "Show me the structure of the users table"
+  - "List all columns and their types"
+
+===============================================================================
+  TROUBLESHOOTING
+===============================================================================
+
+Problem: MCP server not showing in Claude Desktop
+Solution:
+  1. Check config file path: %APPDATA%\Claude\claude_desktop_config.json
+  2. Verify JSON syntax is valid
+  3. Completely restart Claude Desktop
+  4. Check Claude Desktop logs
+
+Problem: Database connection errors
+Solution:
+  1. Run test: .venv\Scripts\python test_mcp_setup.py
+  2. Verify DATABASE_URL is correct
+  3. Check Azure firewall allows your IP
+
+Problem: Python not found
+Solution:
+  1. Verify path: C:\Users\kusha\postgresql-mcp\.venv\Scripts\python.exe
+  2. Make sure file exists
+
+===============================================================================
+  USEFUL FILES
+===============================================================================
+
+SETUP_GUIDE.md              - Complete detailed setup instructions
+MCP_README.md               - Full documentation with all features
+test_mcp_setup.py           - Test database connection
+mcp_client_enterprise.py    - Full test suite with examples
+mcp_server_enterprise.py    - The actual MCP server
+claude_desktop_config.json  - Ready-to-use config file
+
+===============================================================================
+  TEST YOUR SETUP
+===============================================================================
+
+Before configuring Claude Desktop, verify everything works:
+
+  cd C:\Users\kusha\postgresql-mcp
+  .venv\Scripts\python test_mcp_setup.py
+
+Expected output: "[SUCCESS] ALL TESTS PASSED!"
+
+===============================================================================
+  READY TO USE!
+===============================================================================
+
+Your enterprise MCP server is fully configured and ready. Just:
+  1. Copy the config to Claude Desktop
+  2. Restart Claude Desktop
+  3. Start asking Claude to work with your PostgreSQL database!
+
+For detailed help, see: SETUP_GUIDE.md
+===============================================================================
