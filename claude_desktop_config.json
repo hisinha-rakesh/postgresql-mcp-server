@@ -6,7 +6,7 @@
         "C:\\Users\\kusha\\postgresql-mcp\\mcp_server_enterprise.py"
       ],
       "env": {
-        "DATABASE_URL": "postgresql://rakuser:rakpassword@20.232.77.76:5432/librarydatabase"
+        "DATABASE_URL": "postgresql://rakuser:XXXXXXXXXXXX@20.232.77.76:5432/librarydatabase"
       }
     }
   }
