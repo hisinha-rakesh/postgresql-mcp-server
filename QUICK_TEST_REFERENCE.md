@@ -36,7 +36,7 @@ python test_asyncpg.py
 
 ### .env (This Directory)
 ```env
-DATABASE_URL=postgresql://pgadmina:Centurylink%40123@pgs-youtube-app.postgres.database.azure.com:5432/postgres?sslmode=require
+DATABASE_URL=postgresql://pgadmina:XXXXXXX%40123@pgs-youtube-app.postgres.database.azure.com:5432/postgres?sslmode=require
 ```
 **Key**: Username is `pgadmina` (NOT `pgadmina@pgs-youtube-app`)
 
