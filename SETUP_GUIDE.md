@@ -47,7 +47,7 @@ C:\Users\kusha\AppData\Roaming\Claude\claude_desktop_config.json
         "C:\\Users\\kusha\\postgresql-mcp\\mcp_server_enterprise.py"
       ],
       "env": {
-        "DATABASE_URL": "postgresql://pgadmina:Centurylink%40123@pgs-youtube-app.postgres.database.azure.com:5432/postgres?sslmode=require"
+        "DATABASE_URL": "postgresql://pgadmina:XXXXXXXXXXX23@pgs-youtube-app.postgres.database.azure.com:5432/postgres?sslmode=require"
       }
     }
   }
