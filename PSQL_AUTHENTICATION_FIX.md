@@ -1,7 +1,7 @@
 # psql / pg_dump / pg_restore Authentication Issue
 
 ## Problem
-Even though the password is correctly URL-decoded (`Centurylink@123`) and set in the `PGPASSWORD` environment variable, `psql`, `pg_dump`, and `pg_restore` are failing with "password authentication failed".
+Even though the password is correctly URL-decoded (`XXXXXXXX@123`) and set in the `PGPASSWORD` environment variable, `psql`, `pg_dump`, and `pg_restore` are failing with "password authentication failed".
 
 ## Current Status
 - ✅ Password is correctly decoded: `Centurylink%40123` → `Centurylink@123`
@@ -32,7 +32,7 @@ hostname:port:database:username:password
 
 **For your setup:**
 ```
-pgs-youtube-app.postgres.database.azure.com:5432:*:pgadmina@pgs-youtube-app:Centurylink@123
+pgs-youtube-app.postgres.database.azure.com:5432:*:pgadmina@pgs-youtube-app:XXXXXXXX@123
 ```
 
 The `*` means it applies to all databases on that server.
