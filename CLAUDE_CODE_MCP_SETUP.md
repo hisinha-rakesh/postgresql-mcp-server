@@ -58,7 +58,7 @@ All MCP servers are now configured **globally** in your home directory (`C:\User
   "command": "C:\\Users\\kusha\\postgresql-mcp\\.venv\\Scripts\\python.exe",
   "args": ["C:\\Users\\kusha\\postgresql-mcp\\mcp_server_enterprise.py"],
   "env": {
-    "DATABASE_URL": "postgresql://pgadmina:Centurylink%40123@pgs-youtube-app.postgres.database.azure.com:5432/postgres?sslmode=require"
+    "DATABASE_URL": "postgresql://pgadmina:XXXXXXXXXXXX3@pgs-youtube-app.postgres.database.azure.com:5432/postgres?sslmode=require"
   }
 }
 ```
