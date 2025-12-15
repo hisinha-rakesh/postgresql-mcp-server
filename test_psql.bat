@@ -2,7 +2,7 @@
 echo Testing psql connection...
 echo.
 
-set PGPASSWORD=Centurylink@123
+set PGPASSWORD=XXXXXXXXXXX@123
 set PGSSLMODE=require
 
 echo Connecting to Azure PostgreSQL...
