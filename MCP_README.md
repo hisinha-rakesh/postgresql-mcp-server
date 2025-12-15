@@ -55,7 +55,7 @@ DATABASE_URL=postgresql://username:password@host:port/database?sslmode=require
 
 Example for Azure PostgreSQL:
 ```env
-DATABASE_URL=postgresql://pgadmina:Centurylink@123@pgs-youtube-app.postgres.database.azure.com:5432/habittracker?sslmode=require
+DATABASE_URL=postgresql://pgadmina:XXXXXXXXX@123@pgs-youtube-app.postgres.database.azure.com:5432/habittracker?sslmode=require
 ```
 
 ### 3. Test the Server Standalone
@@ -89,7 +89,7 @@ Edit: `~/.config/Claude/claude_desktop_config.json`
         "C:\\Users\\kusha\\postgresql-mcp\\mcp_server_enterprise.py"
       ],
       "env": {
-        "DATABASE_URL": "postgresql://pgadmina:Centurylink@123@pgs-youtube-app.postgres.database.azure.com:5432/habittracker?sslmode=require"
+        "DATABASE_URL": "postgresql://pgadmina:XXXXXXXXXXX@123@pgs-youtube-app.postgres.database.azure.com:5432/habittracker?sslmode=require"
       }
     }
   }
