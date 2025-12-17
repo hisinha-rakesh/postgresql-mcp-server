@@ -2,11 +2,10 @@
   "name": "postgres-enterprise-mcp-server",
   "version": "1.0.0",
   "description": "Enterprise-level MCP Server for PostgreSQL with full DDL, DML, and TCL support",
-  "main": "mcp_server_enterprise.py",
+  "main": "server.py",
   "type": "module",
   "scripts": {
-    "start": "python mcp_server_enterprise.py",
-    "test": "python mcp_client_enterprise.py"
+    "start": "python server.py"
   },
   "keywords": [
     "mcp",
