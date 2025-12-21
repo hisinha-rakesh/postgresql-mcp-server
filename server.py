@@ -26,6 +26,9 @@ from mcp.types import (
     LoggingLevel
 )
 
+# Import authentication module
+from tools.auth import DatabaseAuthenticator, AuthenticationConfig
+
 # Load environment variables
 load_dotenv()
 
@@ -37,35 +40,33 @@ logging.basicConfig(
 )
 logger = logging.getLogger("mcp-postgres-server")
 
-# Database configuration
-DATABASE_URL = os.getenv("DATABASE_URL")
-if not DATABASE_URL:
-    raise ValueError("DATABASE_URL environment variable is required")
-
 # Backup configuration
 DEFAULT_BACKUP_DIR = os.getenv("DEFAULT_BACKUP_DIR", os.path.join(os.getcwd(), "backups"))
 
 # Global database pool
 db_pool: Optional[asyncpg.Pool] = None
 
+# Global authenticator
+db_authenticator: Optional[DatabaseAuthenticator] = None
+
 
 class DatabasePool:
-    """Manages PostgreSQL connection pool"""
+    """Manages PostgreSQL connection pool with authentication support"""
 
-    def __init__(self, database_url: str):
-        self.database_url = database_url
+    def __init__(self, authenticator: DatabaseAuthenticator):
+        self.authenticator = authenticator
         self.pool: Optional[asyncpg.Pool] = None
 
     async def initialize(self):
         """Initialize the connection pool"""
         try:
-            self.pool = await asyncpg.create_pool(
-                self.database_url,
+            self.pool = await self.authenticator.create_connection_pool(
                 min_size=2,
                 max_size=10,
                 command_timeout=60
             )
-            logger.info("Database pool initialized successfully")
+            auth_info = self.authenticator.get_auth_info()
+            logger.info(f"Database pool initialized successfully with {auth_info['auth_type']} authentication")
         except Exception as e:
             logger.error(f"Failed to initialize database pool: {e}")
             raise
@@ -86,8 +87,8 @@ class DatabasePool:
             yield connection
 
 
-# Initialize database pool manager
-db_manager = DatabasePool(DATABASE_URL)
+# Initialize database pool manager (will be initialized in main())
+db_manager: Optional[DatabasePool] = None
 
 
 # Helper function to get database connection
@@ -95,18 +96,8 @@ db_manager = DatabasePool(DATABASE_URL)
 async def get_database_connection(database_name: Optional[str] = None):
     """Get a connection to the specified database or default database"""
     if database_name:
-        import asyncpg
-        import urllib.parse
-
-        # Parse DATABASE_URL and replace the database name
-        dsn_parts = DATABASE_URL.rsplit('/', 1)
-        if len(dsn_parts) == 2:
-            target_dsn = f"{dsn_parts[0]}/{database_name}"
-        else:
-            target_dsn = f"{DATABASE_URL}/{database_name}"
-
-        # Create temporary connection to target database
-        conn = await asyncpg.connect(target_dsn)
+        # Create temporary connection to target database using authenticator
+        conn = await db_authenticator.create_connection(database_name)
         try:
             yield conn
         finally:
@@ -599,6 +590,14 @@ async def list_tools() -> list[Tool]:
                 "type": "object",
                 "properties": {}
             }
+        ),
+        Tool(
+            name="get_authentication_info",
+            description="Get information about the current authentication configuration (PostgreSQL or EntraID/Azure AD). Shows authentication type, connection details, and configuration status.",
+            inputSchema={
+                "type": "object",
+                "properties": {}
+            }
         )
     ]
 
@@ -650,6 +649,8 @@ async def call_tool(name: str, arguments: Any) -> Sequence[TextContent | ImageCo
             result = await handle_list_backups(arguments)
         elif name == "check_backup_tools":
             result = await handle_check_backup_tools(arguments)
+        elif name == "get_authentication_info":
+            result = await handle_get_authentication_info(arguments)
         else:
             raise ValueError(f"Unknown tool: {name}")
 
@@ -1028,20 +1029,9 @@ async def handle_create_database(arguments: dict) -> dict:
     # DATABASE operations require a connection not in a transaction and not to the database being created
     # We need to connect to the maintenance database (postgres) to create a new database
     try:
-        # Parse the current DATABASE_URL to connect to 'postgres' database
-        import asyncpg
-
-        # Get connection parameters from the pool
-        # We'll create a temporary connection to the 'postgres' database
-        dsn_parts = DATABASE_URL.rsplit('/', 1)
-        if len(dsn_parts) == 2:
-            maintenance_dsn = f"{dsn_parts[0]}/postgres"
-        else:
-            maintenance_dsn = DATABASE_URL
-
-        # Create a direct connection to execute CREATE DATABASE
+        # Create a direct connection to execute CREATE DATABASE using authenticator
         # (cannot be done within a transaction or connection pool to another DB)
-        conn = await asyncpg.connect(maintenance_dsn)
+        conn = await db_authenticator.create_connection("postgres")
 
         try:
             # Check if database already exists
@@ -1104,17 +1094,8 @@ async def handle_drop_database(arguments: dict) -> dict:
         }
 
     try:
-        import asyncpg
-
-        # Parse the current DATABASE_URL to connect to 'postgres' database
-        dsn_parts = DATABASE_URL.rsplit('/', 1)
-        if len(dsn_parts) == 2:
-            maintenance_dsn = f"{dsn_parts[0]}/postgres"
-        else:
-            maintenance_dsn = DATABASE_URL
-
-        # Create a direct connection
-        conn = await asyncpg.connect(maintenance_dsn)
+        # Create a direct connection using authenticator
+        conn = await db_authenticator.create_connection("postgres")
 
         try:
             # Check if database exists
@@ -1305,22 +1286,30 @@ async def _backup_with_pg_dump(database_name, backup_path, backup_format, compre
     from pathlib import Path
 
     try:
-        # Parse DATABASE_URL to get connection parameters
-        parsed = urllib.parse.urlparse(DATABASE_URL)
+        # Get connection parameters from authenticator
+        conn_params = await db_authenticator.get_connection_params(database_name)
 
         # Build pg_dump command
         pg_dump_cmd = ["pg_dump"]
 
-        # Add connection parameters
-        if parsed.hostname:
-            pg_dump_cmd.extend(["-h", parsed.hostname])
-        if parsed.port:
-            pg_dump_cmd.extend(["-p", str(parsed.port)])
-        if parsed.username:
-            # Decode URL-encoded username (for Azure format: username@servername)
-            username = urllib.parse.unquote(parsed.username)
-            pg_dump_cmd.extend(["-U", username])
-            logger.info(f"Using username: {username}")
+        # Add connection parameters based on auth type
+        if "dsn" in conn_params:
+            # PostgreSQL auth - parse DSN
+            parsed = urllib.parse.urlparse(conn_params["dsn"])
+            if parsed.hostname:
+                pg_dump_cmd.extend(["-h", parsed.hostname])
+            if parsed.port:
+                pg_dump_cmd.extend(["-p", str(parsed.port)])
+            if parsed.username:
+                username = urllib.parse.unquote(parsed.username)
+                pg_dump_cmd.extend(["-U", username])
+                logger.info(f"Using username: {username}")
+        else:
+            # EntraID auth - use direct parameters
+            pg_dump_cmd.extend(["-h", conn_params["host"]])
+            pg_dump_cmd.extend(["-p", str(conn_params["port"])])
+            pg_dump_cmd.extend(["-U", conn_params["user"]])
+            logger.info(f"Using username: {conn_params['user']}")
 
         # Add database name
         pg_dump_cmd.extend(["-d", database_name])
@@ -1358,26 +1347,32 @@ async def _backup_with_pg_dump(database_name, backup_path, backup_format, compre
         # Add verbose flag
         pg_dump_cmd.append("--verbose")
 
-        # Set password environment variable if present
+        # Set password environment variable
         env = os.environ.copy()
-        if parsed.password:
-            # Decode URL-encoded password
-            password = urllib.parse.unquote(parsed.password)
-            env["PGPASSWORD"] = password
-            logger.info("Password extracted and set in environment")
+
+        if "dsn" in conn_params:
+            # PostgreSQL auth
+            parsed = urllib.parse.urlparse(conn_params["dsn"])
+            if parsed.password:
+                password = urllib.parse.unquote(parsed.password)
+                env["PGPASSWORD"] = password
+                logger.info("Password extracted and set in environment")
+            else:
+                logger.warning("No password found in DATABASE_URL")
+
+            # Parse SSL mode from DSN
+            query_params = urllib.parse.parse_qs(parsed.query) if parsed.query else {}
+            sslmode = query_params.get('sslmode', ['prefer'])[0]
         else:
-            logger.warning("No password found in DATABASE_URL")
+            # EntraID auth - use access token as password
+            env["PGPASSWORD"] = conn_params["password"]
+            logger.info("EntraID access token set as password")
+            sslmode = conn_params.get("ssl", "require")
 
-        # Add SSL/TLS support for Azure PostgreSQL
-        # Parse query parameters from DATABASE_URL
-        query_params = urllib.parse.parse_qs(parsed.query) if parsed.query else {}
-        sslmode = query_params.get('sslmode', ['prefer'])[0]
-
-        # Set SSL environment variables for Azure PostgreSQL
-        if 'azure.com' in (parsed.hostname or '') or sslmode in ['require', 'verify-ca', 'verify-full']:
+        # Set SSL environment variables
+        if sslmode:
             env["PGSSLMODE"] = sslmode
-            # Azure PostgreSQL requires SSL
-            logger.info(f"Azure PostgreSQL detected - enabling SSL mode: {sslmode}")
+            logger.info(f"SSL mode: {sslmode}")
 
         # Create backup directory if it doesn't exist
         backup_dir = Path(backup_path).parent
@@ -1454,24 +1449,12 @@ async def _backup_with_sql(database_name, backup_path, compress_level,
         backup_dir = Path(backup_path).parent
         backup_dir.mkdir(parents=True, exist_ok=True)
 
-        # Force plain format for SQL-based backup
-        if backup_format != "plain":
-            logger.warning(f"Format '{backup_format}' not supported for SQL-based backup, using 'plain' instead")
-            backup_format = "plain"
-
         # Ensure .sql extension
         if not backup_path.endswith('.sql') and not backup_path.endswith('.sql.gz'):
             backup_path = backup_path + '.sql'
 
-        # Connect to the target database
-        import asyncpg
-        dsn_parts = DATABASE_URL.rsplit('/', 1)
-        if len(dsn_parts) == 2:
-            db_dsn = f"{dsn_parts[0]}/{database_name}"
-        else:
-            db_dsn = DATABASE_URL
-
-        conn = await asyncpg.connect(db_dsn)
+        # Connect to the target database using authenticator
+        conn = await db_authenticator.create_connection(database_name)
 
         try:
             backup_content = []
@@ -1726,24 +1709,32 @@ async def _restore_with_pg_tools(database_name, backup_path, create_database, cl
     import urllib.parse
 
     try:
-        # Parse DATABASE_URL to get connection parameters
-        parsed = urllib.parse.urlparse(DATABASE_URL)
+        # Get connection parameters from authenticator
+        conn_params = await db_authenticator.get_connection_params(database_name)
 
         # Build restore command based on backup format
         if is_plain_sql:
             # Use psql for plain SQL files
             restore_cmd = ["psql"]
 
-            # Add connection parameters
-            if parsed.hostname:
-                restore_cmd.extend(["-h", parsed.hostname])
-            if parsed.port:
-                restore_cmd.extend(["-p", str(parsed.port)])
-            if parsed.username:
-                # Decode URL-encoded username (for Azure format: username@servername)
-                username = urllib.parse.unquote(parsed.username)
-                restore_cmd.extend(["-U", username])
-                logger.info(f"Using username: {username}")
+            # Add connection parameters based on auth type
+            if "dsn" in conn_params:
+                # PostgreSQL auth - parse DSN
+                parsed = urllib.parse.urlparse(conn_params["dsn"])
+                if parsed.hostname:
+                    restore_cmd.extend(["-h", parsed.hostname])
+                if parsed.port:
+                    restore_cmd.extend(["-p", str(parsed.port)])
+                if parsed.username:
+                    username = urllib.parse.unquote(parsed.username)
+                    restore_cmd.extend(["-U", username])
+                    logger.info(f"Using username: {username}")
+            else:
+                # EntraID auth - use direct parameters
+                restore_cmd.extend(["-h", conn_params["host"]])
+                restore_cmd.extend(["-p", str(conn_params["port"])])
+                restore_cmd.extend(["-U", conn_params["user"]])
+                logger.info(f"Using username: {conn_params['user']}")
 
             # Add database name
             restore_cmd.extend(["-d", database_name])
@@ -1758,16 +1749,24 @@ async def _restore_with_pg_tools(database_name, backup_path, create_database, cl
             # Use pg_restore for custom/tar/directory formats
             restore_cmd = ["pg_restore"]
 
-            # Add connection parameters
-            if parsed.hostname:
-                restore_cmd.extend(["-h", parsed.hostname])
-            if parsed.port:
-                restore_cmd.extend(["-p", str(parsed.port)])
-            if parsed.username:
-                # Decode URL-encoded username (for Azure format: username@servername)
-                username = urllib.parse.unquote(parsed.username)
-                restore_cmd.extend(["-U", username])
-                logger.info(f"Using username: {username}")
+            # Add connection parameters based on auth type
+            if "dsn" in conn_params:
+                # PostgreSQL auth - parse DSN
+                parsed = urllib.parse.urlparse(conn_params["dsn"])
+                if parsed.hostname:
+                    restore_cmd.extend(["-h", parsed.hostname])
+                if parsed.port:
+                    restore_cmd.extend(["-p", str(parsed.port)])
+                if parsed.username:
+                    username = urllib.parse.unquote(parsed.username)
+                    restore_cmd.extend(["-U", username])
+                    logger.info(f"Using username: {username}")
+            else:
+                # EntraID auth - use direct parameters
+                restore_cmd.extend(["-h", conn_params["host"]])
+                restore_cmd.extend(["-p", str(conn_params["port"])])
+                restore_cmd.extend(["-U", conn_params["user"]])
+                logger.info(f"Using username: {conn_params['user']}")
 
             # Add database name
             restore_cmd.extend(["-d", database_name])
@@ -1786,24 +1785,32 @@ async def _restore_with_pg_tools(database_name, backup_path, create_database, cl
             # Add backup file
             restore_cmd.append(backup_path)
 
-        # Set password environment variable if present
+        # Set password environment variable
         env = os.environ.copy()
-        if parsed.password:
-            # Decode URL-encoded password
-            password = urllib.parse.unquote(parsed.password)
-            env["PGPASSWORD"] = password
-            logger.info("Password extracted and set in environment")
+
+        if "dsn" in conn_params:
+            # PostgreSQL auth
+            parsed = urllib.parse.urlparse(conn_params["dsn"])
+            if parsed.password:
+                password = urllib.parse.unquote(parsed.password)
+                env["PGPASSWORD"] = password
+                logger.info("Password extracted and set in environment")
+            else:
+                logger.warning("No password found in DATABASE_URL")
+
+            # Parse SSL mode from DSN
+            query_params = urllib.parse.parse_qs(parsed.query) if parsed.query else {}
+            sslmode = query_params.get('sslmode', ['prefer'])[0]
         else:
-            logger.warning("No password found in DATABASE_URL")
+            # EntraID auth - use access token as password
+            env["PGPASSWORD"] = conn_params["password"]
+            logger.info("EntraID access token set as password")
+            sslmode = conn_params.get("ssl", "require")
 
-        # Add SSL/TLS support for Azure PostgreSQL
-        query_params = urllib.parse.parse_qs(parsed.query) if parsed.query else {}
-        sslmode = query_params.get('sslmode', ['prefer'])[0]
-
-        # Set SSL environment variables for Azure PostgreSQL
-        if 'azure.com' in (parsed.hostname or '') or sslmode in ['require', 'verify-ca', 'verify-full']:
+        # Set SSL environment variables
+        if sslmode:
             env["PGSSLMODE"] = sslmode
-            logger.info(f"Azure PostgreSQL detected - enabling SSL mode: {sslmode}")
+            logger.info(f"SSL mode: {sslmode}")
 
         # Execute restore command
         tool_name = "psql" if is_plain_sql else "pg_restore"
@@ -1880,15 +1887,8 @@ async def _restore_with_sql(database_name, backup_path, clean, data_only, schema
             with open(backup_path, 'r', encoding='utf-8') as f:
                 backup_sql = f.read()
 
-        # Connect to the target database
-        import asyncpg
-        dsn_parts = DATABASE_URL.rsplit('/', 1)
-        if len(dsn_parts) == 2:
-            db_dsn = f"{dsn_parts[0]}/{database_name}"
-        else:
-            db_dsn = DATABASE_URL
-
-        conn = await asyncpg.connect(db_dsn)
+        # Connect to the target database using authenticator
+        conn = await db_authenticator.create_connection(database_name)
 
         try:
             # Split SQL into individual statements
@@ -2121,11 +2121,51 @@ async def handle_check_backup_tools(arguments: dict) -> dict:
         }
 
 
+async def handle_get_authentication_info(arguments: dict) -> dict:
+    """Get information about the current authentication configuration"""
+    try:
+        auth_info = db_authenticator.get_auth_info()
+
+        result = {
+            "success": True,
+            "authentication": auth_info
+        }
+
+        # Add helpful messages based on auth type
+        if auth_info['auth_type'] == 'entraid':
+            result["note"] = "Using EntraID (Azure AD) authentication with access token"
+            result["token_based"] = True
+        else:
+            result["note"] = "Using traditional PostgreSQL username/password authentication"
+            result["token_based"] = False
+
+        return result
+
+    except Exception as e:
+        logger.error(f"Error getting authentication info: {e}")
+        return {
+            "success": False,
+            "error": f"Failed to get authentication info: {str(e)}"
+        }
+
+
 async def main():
     """Main entry point for the MCP server"""
+    global db_authenticator, db_manager
+
     logger.info("Starting Enterprise PostgreSQL MCP Server...")
 
-    # Initialize database pool
+    # Initialize authenticator
+    try:
+        db_authenticator = DatabaseAuthenticator()
+        auth_info = db_authenticator.get_auth_info()
+        logger.info(f"Authenticator initialized with {auth_info['auth_type']} authentication")
+    except Exception as e:
+        logger.error(f"Failed to initialize authenticator: {e}")
+        raise
+
+    # Initialize database pool with authenticator
+    db_manager = DatabasePool(db_authenticator)
     await db_manager.initialize()
 
     try:
@@ -2140,6 +2180,8 @@ async def main():
     finally:
         # Cleanup
         await db_manager.close()
+        if db_authenticator:
+            await db_authenticator.close()
         logger.info("MCP Server stopped")
 
 

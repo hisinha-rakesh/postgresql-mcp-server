@@ -72,6 +72,141 @@ Press `Ctrl+C` to stop. If no errors appear, you're ready to configure clients.
 
 ---
 
+## Authentication Methods
+
+This MCP server supports two authentication methods:
+
+### Method 1: Traditional PostgreSQL Authentication
+- Uses username and password
+- Standard PostgreSQL connection string
+- Credentials stored in `DATABASE_URL`
+
+### Method 2: EntraID (Azure AD) Authentication
+- Uses Azure Active Directory tokens
+- More secure - no passwords stored
+- Automatic token refresh
+- Supports multiple credential types:
+  - Managed Identity (recommended for Azure resources)
+  - Service Principal
+  - Azure CLI
+  - Visual Studio Code
+
+### Choosing an Authentication Method
+
+Set the `AUTH_TYPE` environment variable in your `.env` file:
+- `AUTH_TYPE=postgresql` for traditional authentication
+- `AUTH_TYPE=entraid` for EntraID/Azure AD authentication
+
+---
+
+## Setting Up EntraID Authentication
+
+If you're using Azure PostgreSQL, EntraID authentication is recommended for better security.
+
+### Prerequisites for EntraID
+
+1. **Azure PostgreSQL Flexible Server** (required for EntraID auth)
+2. **Azure Active Directory Admin** configured on your PostgreSQL server
+3. **One of the following:**
+   - Azure Managed Identity (for Azure VMs, App Services, Container Apps)
+   - Azure AD Service Principal (for applications)
+   - Azure CLI authentication (for local development)
+
+### Step 1: Enable Azure AD on PostgreSQL
+
+1. Go to your Azure PostgreSQL Flexible Server in Azure Portal
+2. Navigate to **Settings > Authentication**
+3. Enable **Azure Active Directory authentication**
+4. Set an Azure AD admin (can be a user or group)
+5. Save changes
+
+### Step 2: Grant Database Permissions
+
+Connect to your PostgreSQL database and grant permissions:
+
+```sql
+-- For a Service Principal or Managed Identity:
+SELECT * FROM pgaadauth_create_principal('<app-name or object-id>', false, false);
+
+-- Grant permissions
+GRANT ALL PRIVILEGES ON DATABASE mydatabase TO "<app-name>";
+GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO "<app-name>";
+```
+
+### Step 3: Configure Environment Variables
+
+#### Option A: Using Managed Identity (Recommended for Azure)
+
+```ini
+# .env file
+AUTH_TYPE=entraid
+
+# PostgreSQL connection details
+PG_HOST=myserver.postgres.database.azure.com
+PG_PORT=5432
+PG_DATABASE=mydatabase
+PG_USER=myapp
+PG_SSLMODE=require
+
+# No Azure credentials needed - Managed Identity will be used automatically
+```
+
+#### Option B: Using Service Principal
+
+1. Create an App Registration in Azure AD
+2. Create a client secret
+3. Grant the service principal access to PostgreSQL
+
+```ini
+# .env file
+AUTH_TYPE=entraid
+
+# PostgreSQL connection details
+PG_HOST=myserver.postgres.database.azure.com
+PG_PORT=5432
+PG_DATABASE=mydatabase
+PG_USER=myapp
+PG_SSLMODE=require
+
+# Azure AD credentials
+AZURE_TENANT_ID=your-tenant-id
+AZURE_CLIENT_ID=your-client-id
+AZURE_CLIENT_SECRET=your-client-secret
+```
+
+#### Option C: Using Azure CLI (Local Development)
+
+1. Run `az login` first
+2. Configure the environment:
+
+```ini
+# .env file
+AUTH_TYPE=entraid
+
+# PostgreSQL connection details
+PG_HOST=myserver.postgres.database.azure.com
+PG_PORT=5432
+PG_DATABASE=mydatabase
+PG_USER=your-email@domain.com
+PG_SSLMODE=require
+
+# No Azure credentials needed - Azure CLI credentials will be used
+```
+
+### Step 4: Test Authentication
+
+After configuration, you can test the authentication:
+
+```bash
+cd C:\Users\kusha\postgresql-mcp
+.venv\Scripts\activate
+python server.py
+```
+
+The server will log which authentication method is being used. You can also use the new `get_authentication_info` tool to verify your setup.
+
+---
+
 ## Claude Desktop Configuration
 
 ### Location of Config File
@@ -130,6 +265,59 @@ Full path: `C:\Users\kusha\AppData\Roaming\Claude\claude_desktop_config.json`
 }
 ```
 *This method reads from your `.env` file automatically.*
+
+### Using EntraID Authentication with Claude Desktop
+
+For EntraID authentication, you can configure it in your `.env` file and reference it:
+
+```json
+{
+  "mcpServers": {
+    "postgresql-entraid": {
+      "command": "C:\\Users\\kusha\\postgresql-mcp\\.venv\\Scripts\\python.exe",
+      "args": [
+        "C:\\Users\\kusha\\postgresql-mcp\\server.py"
+      ],
+      "cwd": "C:\\Users\\kusha\\postgresql-mcp",
+      "env": {
+        "AUTH_TYPE": "entraid",
+        "PG_HOST": "myserver.postgres.database.azure.com",
+        "PG_PORT": "5432",
+        "PG_DATABASE": "mydatabase",
+        "PG_USER": "myapp",
+        "PG_SSLMODE": "require"
+      }
+    }
+  }
+}
+```
+
+For Service Principal authentication, add Azure credentials:
+
+```json
+{
+  "mcpServers": {
+    "postgresql-entraid": {
+      "command": "C:\\Users\\kusha\\postgresql-mcp\\.venv\\Scripts\\python.exe",
+      "args": [
+        "C:\\Users\\kusha\\postgresql-mcp\\server.py"
+      ],
+      "cwd": "C:\\Users\\kusha\\postgresql-mcp",
+      "env": {
+        "AUTH_TYPE": "entraid",
+        "PG_HOST": "myserver.postgres.database.azure.com",
+        "PG_PORT": "5432",
+        "PG_DATABASE": "mydatabase",
+        "PG_USER": "myapp",
+        "PG_SSLMODE": "require",
+        "AZURE_TENANT_ID": "your-tenant-id",
+        "AZURE_CLIENT_ID": "your-client-id",
+        "AZURE_CLIENT_SECRET": "your-client-secret"
+      }
+    }
+  }
+}
+```
 
 ### 3. Restart Claude Desktop
 
@@ -262,6 +450,18 @@ Create `.vscode/tasks.json` in your project:
 
 ## Testing the Connection
 
+### Test 0: Check Authentication Info
+
+**In Claude Desktop or Claude Code:**
+```
+Can you show me the authentication information for the PostgreSQL connection?
+```
+
+**Expected response:**
+- Authentication type (postgresql or entraid)
+- Connection details
+- For EntraID: token-based authentication status
+
 ### Test 1: List Available Tools
 
 **In Claude Desktop or Claude Code:**
@@ -269,7 +469,7 @@ Create `.vscode/tasks.json` in your project:
 Can you list all the PostgreSQL database tools available to you?
 ```
 
-**Expected response:** List of 19 tools including:
+**Expected response:** List of 20 tools including:
 - execute_select
 - execute_insert
 - execute_update
@@ -277,6 +477,7 @@ Can you list all the PostgreSQL database tools available to you?
 - execute_create_table
 - create_database
 - backup_database
+- get_authentication_info
 - etc.
 
 ### Test 2: List Databases

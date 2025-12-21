@@ -1,6 +1,18 @@
-# MCP-style FastAPI Server for PostgreSQL Updates via Natural Language
+# Enterprise PostgreSQL MCP Server
 
-This project provides a FastAPI server that acts as a simple MCP-style endpoint to interact with a PostgreSQL database. It exposes an API that accepts natural language queries, translates them into SQL `UPDATE` statements using Claude (via Azure OpenAI), and executes them against the database.
+This is a comprehensive Model Context Protocol (MCP) server for PostgreSQL that provides full database management capabilities including DDL, DML, TCL operations, and advanced features like backup/restore and multiple authentication methods.
+
+## Features
+
+- **Full SQL Support**: DDL (CREATE, ALTER, DROP), DML (SELECT, INSERT, UPDATE, DELETE), and TCL (transactions)
+- **Multiple Authentication Methods**:
+  - Traditional PostgreSQL username/password authentication
+  - EntraID (Azure AD) token-based authentication with automatic token refresh
+- **Database Management**: Create, drop, and list databases
+- **Schema Inspection**: Get detailed schema and table information
+- **Backup & Restore**: SQL-based and pg_dump/pg_restore support
+- **Transaction Support**: Execute multiple statements atomically
+- **Azure PostgreSQL Support**: Full support for Azure PostgreSQL Flexible Server
 
 ---
 
@@ -25,7 +37,7 @@ A malicious or poorly phrased natural language query could be translated into a 
 ### Prerequisites
 - Python 3.8+
 - A running PostgreSQL database
-- Azure OpenAI account with Claude deployment
+- (Optional) Azure AD / EntraID for token-based authentication
 
 ### Installation
 1.  **Clone/Download Files:** Make sure `mcp_postgres_server.py`, `mcp_client.py`, `requirements.txt`, and this `README.md` are in the same directory.
@@ -53,50 +65,135 @@ A malicious or poorly phrased natural language query could be translated into a 
 5.  **Environment Variables:**
     Create a file named `.env` in the same directory (you can copy from `.env.example`):
 
-    ```
+    #### For Traditional PostgreSQL Authentication:
+    ```ini
     # .env file
-    # PostgreSQL Database URL
+    AUTH_TYPE=postgresql
     DATABASE_URL=postgresql://user:password@host:port/database?sslmode=require
+    ```
 
-    # Azure Claude Configuration
-    AZURE_API_KEY=your_azure_api_key_here
-    AZURE_ENDPOINT=https://your-endpoint.services.ai.azure.com/anthropic/
-    DEPLOYMENT_NAME=claude-sonnet-4-5-2
+    #### For EntraID (Azure AD) Authentication:
+    ```ini
+    # .env file
+    AUTH_TYPE=entraid
+    PG_HOST=myserver.postgres.database.azure.com
+    PG_PORT=5432
+    PG_DATABASE=mydatabase
+    PG_USER=myapp
+    PG_SSLMODE=require
+
+    # For Service Principal (optional):
+    AZURE_TENANT_ID=your-tenant-id
+    AZURE_CLIENT_ID=your-client-id
+    AZURE_CLIENT_SECRET=your-client-secret
     ```
 
 ---
 
-## 2. Running the Server
+## 2. Authentication Methods
 
-Once the setup is complete, you can start the FastAPI server using Uvicorn:
+### Traditional PostgreSQL Authentication
+
+The standard method using username and password:
+- Simple setup
+- Works with any PostgreSQL server
+- Credentials in DATABASE_URL
+
+### EntraID (Azure AD) Authentication
+
+Recommended for Azure PostgreSQL for enhanced security:
+- No passwords stored - uses Azure AD tokens
+- Automatic token refresh
+- Supports multiple credential types:
+  - **Managed Identity** (recommended for Azure resources)
+  - **Service Principal** (for applications)
+  - **Azure CLI** (for local development)
+  - **Visual Studio Code** (for local development)
+
+See [CONFIGURATION_GUIDE.md](CONFIGURATION_GUIDE.md) for detailed setup instructions.
+
+## 3. Running the Server
+
+### As an MCP Server (Recommended)
+
+Configure the server in Claude Desktop or Claude Code. See [CONFIGURATION_GUIDE.md](CONFIGURATION_GUIDE.md) for details.
+
+### Standalone Testing
+
+You can also test the server directly:
 
 ```bash
-python mcp_postgres_server.py
+cd C:\Users\kusha\postgresql-mcp
+.venv\Scripts\activate
+python server.py
 ```
 
-Or alternatively:
-
-```bash
-uvicorn mcp_postgres_server:app --reload --host 127.0.0.1 --port 8000
-```
-
-The server will be running at `http://127.0.0.1:8000`.
+The server will log the authentication method being used and connection status.
 
 ---
 
-## 3. Usage
+## 4. Available Tools
 
-You can send `POST` requests to the `/mcp/update_table` endpoint with a JSON payload containing your natural language query.
+The MCP server provides 20 tools for database operations:
 
-### Using the Python Client
+### Data Manipulation (DML)
+- `execute_select` - Query data
+- `execute_insert` - Insert rows
+- `execute_update` - Update rows
+- `execute_delete` - Delete rows
 
-The easiest way to interact with the server is using the provided `mcp_client.py`:
+### Data Definition (DDL)
+- `execute_create_table` - Create tables
+- `execute_alter_table` - Modify table structure
+- `execute_drop_table` - Delete tables
+- `execute_create_index` - Create indexes
+- `execute_drop_index` - Remove indexes
 
-```bash
-python mcp_client.py
+### Database Management
+- `create_database` - Create new databases
+- `drop_database` - Delete databases
+- `list_databases` - List all databases
+
+### Schema Inspection
+- `get_schema_info` - Get database schema details
+- `get_table_info` - Get table structure and statistics
+
+### Backup & Restore
+- `backup_database` - Create database backups
+- `restore_database` - Restore from backups
+- `list_backups` - List available backup files
+- `check_backup_tools` - Check pg_dump/pg_restore availability
+
+### Transactions
+- `execute_transaction` - Execute multiple statements atomically
+
+### Utilities
+- `execute_raw_sql` - Execute any SQL statement
+- `get_authentication_info` - View authentication configuration
+
+## 5. Usage Examples
+
+Once configured with Claude Desktop or Claude Code, you can interact naturally:
+
+```
+Can you show me the current authentication method?
 ```
 
-This will run the example queries defined in the client script.
+```
+List all databases on the server
+```
+
+```
+Create a backup of the production database to C:\backups
+```
+
+```
+Show me all tables in the public schema
+```
+
+```
+Execute this query: SELECT * FROM users WHERE created_at > NOW() - INTERVAL '7 days'
+```
 
 ### Using cURL
 
